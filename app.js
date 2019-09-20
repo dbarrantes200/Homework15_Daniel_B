@@ -1,124 +1,169 @@
-function buildMetadata(sample) {
-  // Using `d3.json` to fetch the metadata for a sample
-  // console.log(sample)
-  d3.json(`/metadata/${sample}`).then(function(sampleData) {
-    console.log(sampleData);
-    
-    // Using d3 to select the panel with id of `#sample-metadata`
-    var PANEL = d3.select("#sample-metadata");
-    
-    // Using `.html("") to clear any existing metadata
-    PANEL.html("");
-    
-    // Using `Object.entries` to add each key and value pair to the panel
-    // Using d3 to append new tags for each key-value in the metadata.
-    Object.entries(sampleData).forEach(([key, value]) => {
-      PANEL.append('h6').text(`${key}, ${value}`);
-    })
-    
-    // BONUS: Build the Gauge Chart
-    // buildGauge(data.WFREQ);
-    
-    
-      
-    })
-  }
-  
-  function buildCharts(sample) {
-    
-    // @TODO: Use `d3.json` to fetch the sample data for the plots
-    
-    // @TODO: Build a Bubble Chart using the sample data
-    
-    // @TODO: Build a Pie Chart
-    // HINT: You will need to use slice() to grab the top 10 sample_values,
-    // otu_ids, and labels (10 each).
-    
-    // console.log(sample)  
-    d3.json(`/samples/${sample}`).then(function (sampleData) {
-      console.log(sampleData);
-      // console.log(sampleData.otu_ids);
-      // console.log(sampleData.otu_labels);
-      // console.log(sampleData.sample_values);
+function init(){
+  var dropDown = d3.select("#selDataset");
+  d3.json("samples.json").then((data) => {
+      var firstId = data.names[0];
+      // Populate the dropdown with subjectIDs
+      data.names.forEach((id) => {
+          dropDown
+              .append("option")
+              .text(id)
+              .property("value",id);
+      });
+      // Refresh page with data from firstId
+      optionChanged(firstId);
 
-      const otu_ids = sampleData.otu_ids;
-      const otu_labels = sampleData.otu_labels;
-      const sample_values = sampleData.sample_values;
-
-      //Building Bubble chart
-      var bubbleData = [{
-        x: otu_ids,
-        y: sample_values,
-        text: otu_labels,
-        mode: 'markers',
-        marker: {
-          size: sample_values,
-          color: otu_ids,
-          colorscale: 'Earth'
-        }
-      }];      
-
-      var bubbleLayout = {
-        margin: { t: 0 },
-        hovermode: 'closest',
-        xaxis: {title: 'OTU ID'},
-      };
-
-      Plotly.plot('bubble', bubbleData, bubbleLayout);
-
-      // Building Pie Chart
-      var pieData = [{
-        values: sample_values.slice(0,10),
-        labels: otu_ids.slice(0,10),
-        hovertext: otu_labels.slice(0,10,),
-        hoverinfo: 'hovertext',
-        type: 'pie'
-      }];
-
-      var pieLayout = {
-        margin: {t: 0, l: 0}
-      }
-
-      Plotly.plot('pie', pieData, pieLayout); 
-
-    });
-  }
-  
-  
-  // const defaultURL = "/metadata/<sample>";
-  // d3.json(defaultURL).then(function (data) {
-  //   var data = [data];
-  //   var layout = { margin: { t: 30, b: 100 } };
-  //   Plotly.plot("bar", data, layout);
-  // });
-  
-
-
-function init() {
-  // Grab a reference to the dropdown select element
-  var selector = d3.select("#selDataset");
-
-  // Use the list of sample names to populate the select options
-  d3.json("/names").then((sampleNames) => {
-    sampleNames.forEach((sample) => {
-      selector
-        .append("option")
-        .text(sample)
-        .property("value", sample);
-    });
-
-    // Use the first sample from the list to build the initial plots
-    const firstSample = sampleNames[0];
-    buildCharts(firstSample);
-    buildMetadata(firstSample);
   });
+};
+
+
+function optionChanged(id){
+  d3.json("samples.json").then((data) => {
+      var metadata = data.metadata.filter(function(metadata){
+          return metadata.id == id;
+      });
+      var samples = data.samples.filter(function(samples){
+          return samples.id == id;
+      });
+      // Update the sample-metadata
+      var samplePanel = d3.select("#sample-metadata");
+      samplePanel.html("");
+      Object.entries(metadata[0]).forEach(([key, value]) => {
+          samplePanel.append("p").text(`${key}:${value}`)
+      });
+      // * Use sample_values as the values for the bar chart.
+      var sampleValues = samples[0].sample_values;
+      // * Use otu_ids as the labels for the bar chart.
+      var otuIds = samples[0].otu_ids;
+      //* Use otu_labels as the hovertext for the chart.
+      var otuLabels = samples[0].otu_labels;
+     
+      console.log(metadata[0].wfreq);
+  
+      buildGauge(metadata[0].wfreq);
+
+      var trace1 = {
+          x: sampleValues.slice(0,10).reverse(),
+          y: otuIds.slice(0,10).map(function(e){return "OTU " + e.toString()}).reverse(),
+          hovertext: otuLabels.slice(0,10).reverse(),
+          orientation: "h",
+          hoverinfo: "text",
+          type: "bar"
+        };
+      var bardata = [trace1];
+      Plotly.newPlot("bar", bardata);
+      var trace2 = {
+          // * Use otu_ids for the x values.
+          x: otuIds,
+          // * Use sample_values for the y values.
+          y: sampleValues,
+          // * Use sample_values for the marker size.
+          // * Use otu_ids for the marker colors.
+          mode: "markers",
+          marker:{
+            size: sampleValues,
+            color: otuIds
+          },
+          // * Use otu_labels for the text values.
+          text: otuLabels
+          };
+      bubbleData = [trace2];
+      var bubbleLayout = {
+            xaxis:{title: "OTU ID"}
+          };
+      Plotly.newPlot("bubble", bubbleData, bubbleLayout);
+  });
+};
+
+
+
+function buildGauge(WFREQ) {
+  // Enter the Washing Frequency Between 0 and 180
+  let level = parseFloat(WFREQ) * 20;
+
+  // Trigonometry to Calculate Meter Point
+  let degrees = 180 - level;
+  let radius = 0.5; 
+  let radians = (degrees * Math.PI) / 180;
+  let x = radius * Math.cos(radians);
+  let y = radius * Math.sin(radians);
+
+  // Path May Have to Change to Create a Better Triangle
+  let mainPath = "M-.0 -0.05 L  .0 0.05 L";
+  let pathX = String(x);
+  let space = " ";
+  let pathY = String(y);
+  let pathEnd = " Z";
+  let path = mainPath.concat(pathX, space, pathY, pathEnd);
+  console.log(path);
+  let data = [
+      {
+          type: "scatter",
+          x:[0],
+          y:[0],
+          marker: { size: 12, color: "850000" },
+          showlegend: false,
+          text: level,
+          hoverinfo: "text+name"
+      },
+      {
+          values: [50/9, 50/9, 50/9, 50/9, 50/9, 50/9, 50/9, 50/9, 50/9, 50],
+          rotation: 90,
+          text:["8-9", "7-8", "6-7", "5-6", "4-5", "3-4", "2-3", "1-2", "0-1", ""],
+          textinfo: "text",
+          textposition: "inside",
+          marker: {
+              colors: [
+                  "rgba(0,105,11,.5)",
+                  "rgba(10,120,22,.5)",
+                  "rgba(14,127,0,.5)",
+                  "rgba(110,154,22,.5)",
+                  "rgba(170,202,42,.5)",
+                  "rgba(202,209,95,.5)",
+                  "rgba(210,206,145,.5)",
+                  "rgba(232,226,202,.5)",
+                  "rgba(240, 230,215,.5)",
+                  "rgba(255,255,255,0)"
+              ]
+          },
+          labels:["8-9", "7-8", "6-7", "5-6", "4-5", "3-4", "2-3", "1-2", "0-1", ""],
+          hoverinfo: "label",
+          hole: 0.5,
+          type: "pie",
+          showlegend: false
+      }
+  ]
+
+  var layout = {
+      shapes: [
+          {
+              type: "path",
+              path: path,
+              fillcolor: "850000",
+              line: {
+                  color: "850000"
+              }
+          }
+      ],
+      title: "Belly Button Washing Frequency <br> Scrubs per Week",
+      height: 500,
+      width: 500,
+      xaxis: {
+          zeroline:false,
+          showticklabels: false,
+          showgrid: false,
+          range: [-1, 1]
+      },
+      yaxis: {
+          zeroline: false,
+          showticklabels: false,
+          showgrid: false,
+          range: [-1, 1]
+      }
+  }
+  let GAUGE = document.getElementById("gauge");
+  Plotly.newPlot(GAUGE, data, layout);
 }
 
-function optionChanged(newSample) {
-  // Fetch new data each time a new sample is selected
-  buildCharts(newSample);
-  buildMetadata(newSample);
-}
 
-// Initialize the dashboard
 init();
+
